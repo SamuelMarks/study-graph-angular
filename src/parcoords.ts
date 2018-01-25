@@ -6,6 +6,17 @@
 
 import * as d3 from 'd3';
 
+interface IArc {
+  active?: string;
+  width?: (id) => number;
+  startAngle?: (arg?) => number | IArc;
+  endAngle?: (arg?) => number;
+  arc?: {outerRadius: (n: number) => IArc}
+  length?: (id) => number;
+}
+
+declare const $V; // ?
+
 function d3_functor(v) {
   return typeof v === 'function' ? v : function() { return v; };
 }
@@ -87,7 +98,7 @@ export function d3parcoords(config) {
     dimensions: {},
     dimensionTitleRotation: 0,
     brushes: [],
-    brushed: false,
+    brushed: false as any as ((arg?) => void ) | false,
     brushedColor: null,
     alphaOnBrushed: 0.0,
     mode: 'default',
@@ -108,7 +119,8 @@ export function d3parcoords(config) {
     flipAxes: [],
     animationTime: 1100, // How long it takes to flip the axis when you double click
     rotateLabels: false,
-    clusterCentroids: undefined
+    clusterCentroids: undefined,
+    brushPredicate: null
   };
 
   extend(__, config);
@@ -198,7 +210,7 @@ export function d3parcoords(config) {
     axis = d3.axisLeft().ticks(5);
   let g; // groups for axes, brushes
   const ctx: any | {} = {},
-    canvas: {foreground?: string, background?: string} = {},
+    canvas: {foreground?: string, background?: string, brushed?: null} = {},
     clusterCentroids = [];
 // side effects for setters
   const side_effects = d3.dispatch(...d3.keys(__));
@@ -519,7 +531,7 @@ export function d3parcoords(config) {
 
     } else {
       scales.forEach(function(d) {
-        __.dimensions[d].yscale.domain(d3.extent(__.data, function(d) { return +d[k]; }));
+        __.dimensions[d].yscale.domain(d3.extent(__.data, d => +d[k] ));
       });
     }
 
@@ -1721,7 +1733,7 @@ export function d3parcoords(config) {
 // bl.ocks.org/syntagmatic/5441022
 
   (function() {
-    let strums: {active?: string, width?: number} = {},
+    let strums: {active?: string, width?: (id) => number} = {},
       strumRect;
 
     function drawStrum(strum, activePoint) {
@@ -1812,7 +1824,7 @@ export function d3parcoords(config) {
       return dims;
     }
 
-    function onDragStart() {
+    function onDragStart(arg?) {
       // First we need to determine between which two axes the sturm was started.
       // This will determine the freedom of movement, because a strum can
       // logically only happen between two axes, so no movement outside these axes
@@ -1844,7 +1856,7 @@ export function d3parcoords(config) {
       };
     }
 
-    function onDrag() {
+    function onDrag(arg?) {
       return function() {
         const ev = d3.event,
           strum = strums[strums.active];
@@ -1879,7 +1891,7 @@ export function d3parcoords(config) {
       };
     }
 
-    function selected() {
+    function selected(arg?) {
       let ids = Object.getOwnPropertyNames(strums),
         brushed = __.data;
 
@@ -1936,7 +1948,7 @@ export function d3parcoords(config) {
 
         brushed = selected(strums);
         strums.active = undefined;
-        __.brushed = brushed;
+        __.brushed = brushed as any as ((arg?) => void);
         pc.renderBrushed();
         events.brushend.call(pc, __.brushed);
       };
@@ -1944,7 +1956,7 @@ export function d3parcoords(config) {
 
     function brushReset(strums) {
       return function() {
-        const ids = Object.getOwnPropertyNames(strums).filter(function(d) {
+        const ids = Object.getOwnPropertyNames(strums).filter((d: any) => {
           return !isNaN(d);
         });
 
@@ -1966,7 +1978,7 @@ export function d3parcoords(config) {
       // placed. NOTE: even though they are evenly spaced in our current
       // implementation, we keep for when non-even spaced segments are supported as
       // well.
-      strums.width = function(id) {
+      strums.width = (id): number => {
         const strum = strums[id];
 
         if (strum === undefined) {
@@ -1977,7 +1989,7 @@ export function d3parcoords(config) {
       };
 
       pc.on('axesreorder.strums', function() {
-        const ids = Object.getOwnPropertyNames(strums).filter(function(d) {
+        const ids = Object.getOwnPropertyNames(strums).filter((d: any) => {
           return !isNaN(d);
         });
 
@@ -2227,7 +2239,7 @@ export function d3parcoords(config) {
         .attr('class', 'brush')
         .each(function(d) {
           d3.select(this).call(brushFor(d));
-        })
+        });
 
       brush.selectAll('rect')
         .style('visibility', null)
@@ -2265,7 +2277,7 @@ export function d3parcoords(config) {
 // code based on 2D.strums.js
 
   (function() {
-    let arcs: {active?: string, width?: number} = {},
+    let arcs: IArc = {},
       strumRect;
 
     function drawStrum(arc, activePoint) {
@@ -2303,15 +2315,15 @@ export function d3parcoords(config) {
 
       drag
         .on('drag', function(d, i) {
-          const ev = d3.event,
-            angle = 0;
+          const ev = d3.event;
+          let angle = 0;
 
           i = i + 2;
 
           arc['p' + i][0] = Math.min(Math.max(arc.minX + 1, ev.x), arc.maxX);
           arc['p' + i][1] = Math.min(Math.max(arc.minY, ev.y), arc.maxY);
 
-          angle = i === 3 ? arcs.startAngle(id) : arcs.endAngle(id);
+          angle = i === 3 ? arcs.startAngle(id) as number : arcs.endAngle(id);
 
           if ((arc.startAngle < Math.PI && arc.endAngle < Math.PI && angle < Math.PI) ||
             (arc.startAngle >= Math.PI && arc.endAngle >= Math.PI && angle >= Math.PI)) {
@@ -2392,18 +2404,18 @@ export function d3parcoords(config) {
         p[0] = p[0] - __.margin.left;
         p[1] = p[1] - __.margin.top;
 
-        dims = dimensionsForPoint(p),
-          arc = {
-            p1: p,
-            dims: dims,
-            minX: xscale(dims.left),
-            maxX: xscale(dims.right),
-            minY: 0,
-            maxY: h(),
-            startAngle: undefined,
-            endAngle: undefined,
-            arc: d3.svg.arc().innerRadius(0)
-          };
+        dims = dimensionsForPoint(p);
+        arc = {
+          p1: p,
+          dims: dims,
+          minX: xscale(dims.left),
+          maxX: xscale(dims.right),
+          minY: 0,
+          maxY: h(),
+          startAngle: undefined,
+          endAngle: undefined,
+          arc: d3.svg.arc().innerRadius(0)
+        };
 
         arcs[dims.i] = arc;
         arcs.active = dims.i;
@@ -2489,12 +2501,12 @@ export function d3parcoords(config) {
       };
     }
 
-    function selected() {
-      const ids = Object.getOwnPropertyNames(arcs),
+    function selected(arg?): IArc {
+      let ids = Object.getOwnPropertyNames(arcs),
         brushed = __.data;
 
       // Get the ids of the currently active arcs.
-      ids = ids.filter(function(d) {
+      ids = ids.filter((d: any) => {
         return !isNaN(d);
       });
 
@@ -2512,7 +2524,7 @@ export function d3parcoords(config) {
         return test(angle);
       }
 
-      if (ids.length === 0) { return brushed; }
+      if (ids.length === 0) { return brushed as any; }
 
       return brushed.filter(function(d) {
         switch (brush.predicate) {
@@ -2523,7 +2535,7 @@ export function d3parcoords(config) {
           default:
             throw new Error('Unknown brush predicate ' + __.brushPredicate);
         }
-      });
+      }) as any;
     }
 
     function removeStrum(arg?) {
@@ -2539,8 +2551,8 @@ export function d3parcoords(config) {
 
     function onDragEnd(arg?) {
       return function() {
-        const brushed = __.data,
-          arc = arcs[arcs.active];
+        let brushed = __.data,
+          arc: IArc & {p1: number, p2: number} = arcs[arcs.active];
 
         // Okay, somewhat unexpected, but not totally unsurprising, a mousclick is
         // considered a drag without move. So we have to deal with that case
@@ -2551,18 +2563,18 @@ export function d3parcoords(config) {
         if (arc) {
           const angle = arcs.startAngle(arcs.active);
 
-          arc.startAngle = angle;
-          arc.endAngle = angle;
+          arc.startAngle = angle as any;
+          arc.endAngle = angle as any;
           arc.arc
             .outerRadius(arcs.length(arcs.active))
             .startAngle(angle)
-            .endAngle(angle);
+            ['endAngle'](angle);
         }
 
 
-        brushed = selected(arcs);
+        brushed = selected(arcs) as any;
         arcs.active = undefined;
-        __.brushed = brushed;
+        __.brushed = brushed as any;
         pc.renderBrushed();
         events.brushend.call(pc, __.brushed);
       };
@@ -2570,7 +2582,7 @@ export function d3parcoords(config) {
 
     function brushReset(arcs) {
       return function() {
-        const ids = Object.getOwnPropertyNames(arcs).filter(function(d) {
+        const ids = Object.getOwnPropertyNames(arcs).filter((d: any) => {
           return !isNaN(d);
         });
 
@@ -2603,7 +2615,7 @@ export function d3parcoords(config) {
       };
 
       // returns angles in [-PI/2, PI/2]
-      angle = function(p1, p2) {
+      function angle(p1, p2) {
         const a = p1[0] - p2[0],
           b = p1[1] - p2[1],
           c = hypothenuse(a, b);
@@ -2617,15 +2629,15 @@ export function d3parcoords(config) {
         if (arc === undefined) {
           return undefined;
         }
-        const sAngle = angle(arc.p1, arc.p2),
-          uAngle = -sAngle + Math.PI / 2;
+        const sAngle = angle(arc.p1, arc.p2);
+        let uAngle = -sAngle + Math.PI / 2;
 
         if (arc.p1[0] > arc.p2[0]) {
           uAngle = 2 * Math.PI - uAngle;
         }
 
         return uAngle;
-      }
+      };
 
       arcs.startAngle = function(id) {
         const arc = arcs[id];
@@ -2633,17 +2645,17 @@ export function d3parcoords(config) {
           return undefined;
         }
 
-        const sAngle = angle(arc.p1, arc.p3),
-          uAngle = -sAngle + Math.PI / 2;
+        const sAngle = angle(arc.p1, arc.p3);
+        let uAngle = -sAngle + Math.PI / 2;
 
         if (arc.p1[0] > arc.p3[0]) {
           uAngle = 2 * Math.PI - uAngle;
         }
 
         return uAngle;
-      }
+      };
 
-      arcs.length = function(id) {
+      arcs.length = (id): number => {
         const arc = arcs[id];
 
         if (arc === undefined) {
@@ -2655,10 +2667,10 @@ export function d3parcoords(config) {
           c = hypothenuse(a, b);
 
         return (c);
-      }
+      };
 
       pc.on('axesreorder.arcs', function() {
-        const ids = Object.getOwnPropertyNames(arcs).filter(function(d) {
+        const ids = Object.getOwnPropertyNames(arcs).filter((d: any) => {
           return !isNaN(d);
         });
 
@@ -2846,7 +2858,7 @@ d3.renderQueue = (function(func) {
     rq.invalidate();
     _clear();
     rq.render();
-  };
+  } as any;
 
   rq.render = function() {
     _i = 0;
