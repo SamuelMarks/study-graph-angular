@@ -60,3 +60,7 @@ import 'zone.js/dist/zone'; // Included with Angular CLI.
  * Need to import at least one locale-data with intl.
  */
 // import 'intl/locale-data/jsonp/en';
+
+
+// Rewrote in TypeScript from https://github.com/mlarosa2/parcoords
+import './parcoords';
